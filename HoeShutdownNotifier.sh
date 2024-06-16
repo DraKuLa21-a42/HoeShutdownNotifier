@@ -1,6 +1,8 @@
 #!/bin/bash
 
-#### Example secret.txt
+# Example run script: "bash HoeShutdownNotifier.sh home"
+#### Example file "home"
+## SEND_TO="TG"
 ## STREET_ID="123456"
 ## HOUSE="12"
 ## TG_BOT_ID="bot6191234558:AAGWWpWtZUExAmPlEbpt3WkS8QzdcuQNq2DA"
@@ -10,16 +12,17 @@
 ## SLACK_TOKEN="xoxb-2370012345-6315485354321-a8669EiJnp0JExAmPlELwOHg"
 ####
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/$1"
 URL="https://hoe.com.ua/shutdown-events"
 POST_DATA="streetId=$STREET_ID&house=$HOUSE"
 SUBJECT=""
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SCRIPTNAME="$(basename "$0" .sh)"
 PREV_FILE="$SCRIPT_DIR/${SCRIPTNAME}_lastdata.txt"
 LOG_DIR="$SCRIPT_DIR/hoe-check"
 LOG_FILE="$LOG_DIR/${SCRIPTNAME}.log"
 CURR_DATE="$(date +"%H:%M:%S %d.%m.%Y")"
-source "$SCRIPT_DIR/secret.txt"
+
 
 if [ ! -d "$LOG_DIR" ]; then
     mkdir -p "$LOG_DIR"
@@ -53,9 +56,9 @@ send_message_slack() {
 }
 
 send_message() {
-        if [ "$1" == "TG" ]; then
+        if [ "$SEND_TO" == "TG" ]; then
                 send_message_tg "$2"
-        elif [ "$1" == "SLACK" ]; then
+        elif [ "$SEND_TO" == "SLACK" ]; then
                 send_message_slack "$2"
         else
                 exit 1
@@ -69,7 +72,7 @@ save_log() {
 }
 
 html_content=$(curl -s "${URL}" -H 'x-requested-with: XMLHttpRequest' --data-raw "${POST_DATA}")
-
+echo "curl -s ${URL} -H 'x-requested-with: XMLHttpRequest' --data-raw ${POST_DATA}"
 parsed_text=$(echo "$html_content" | sed -n '
     /<tr>/ {
         n
