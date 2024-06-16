@@ -65,7 +65,7 @@ send_message() {
 save_log() {
         echo "$CURR_DATE" >> "$LOG_FILE"
         echo "$html_content" >> "$LOG_FILE"
-                echo "" >> "$LOG_FILE"
+        echo "" >> "$LOG_FILE"
 }
 
 html_content=$(curl -s "${URL}" -H 'x-requested-with: XMLHttpRequest' --data-raw "${POST_DATA}")
