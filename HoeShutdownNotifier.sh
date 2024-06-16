@@ -10,19 +10,21 @@
 ## TG_DIS_NOTIFY="true"
 ## SLACK_CNANNEL="C02EXAMPLE"
 ## SLACK_TOKEN="xoxb-2370012345-6315485354321-a8669EiJnp0JExAmPlELwOHg"
+## ENABLE_LOG="yes"
 ####
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$SCRIPT_DIR/$1"
+CFG_FILE="$1"
+source "$SCRIPT_DIR/$CFG_FILE"
 URL="https://hoe.com.ua/shutdown-events"
 POST_DATA="streetId=$STREET_ID&house=$HOUSE"
 SUBJECT=""
 SCRIPTNAME="$(basename "$0" .sh)"
-PREV_FILE="$SCRIPT_DIR/${SCRIPTNAME}_lastdata.txt"
-LOG_DIR="$SCRIPT_DIR/hoe-check"
-LOG_FILE="$LOG_DIR/${SCRIPTNAME}.log"
+PREV_FILE="$SCRIPT_DIR/${SCRIPTNAME}_lastdata_$CFG_FILE.txt"
+LOG_DIR="$SCRIPT_DIR/logs"
+LOG_FILE="$LOG_DIR/${SCRIPTNAME}_$CFG_FILE.log"
 CURR_DATE="$(date +"%H:%M:%S %d.%m.%Y")"
-
+ENABLE_LOG="yes"
 
 if [ ! -d "$LOG_DIR" ]; then
     mkdir -p "$LOG_DIR"
@@ -66,9 +68,11 @@ send_message() {
 }
 
 save_log() {
+	if [ "$ENABLE_LOG" == "yes" ]; then
         echo "$CURR_DATE" >> "$LOG_FILE"
         echo "$html_content" >> "$LOG_FILE"
         echo "" >> "$LOG_FILE"
+	fi
 }
 
 html_content=$(curl -s "${URL}" -H 'x-requested-with: XMLHttpRequest' --data-raw "${POST_DATA}")
