@@ -1,6 +1,6 @@
 #!/bin/bash
 
-#### Example source
+#### Example secret.txt
 ## STREET_ID="123456"
 ## HOUSE="12"
 ## TG_BOT_ID="bot6191234558:AAGWWpWtZUExAmPlEbpt3WkS8QzdcuQNq2DA"
