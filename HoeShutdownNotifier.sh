@@ -76,7 +76,7 @@ save_log() {
 }
 
 html_content=$(curl -s "${URL}" -H 'x-requested-with: XMLHttpRequest' --data-raw "${POST_DATA}")
-echo "curl -s ${URL} -H 'x-requested-with: XMLHttpRequest' --data-raw ${POST_DATA}"
+
 parsed_text=$(echo "$html_content" | sed -n '
     /<tr>/ {
         n
@@ -97,16 +97,18 @@ parsed_text=$(echo "$parsed_text" | awk '{print} $0 ~ /^Кінець:/ {print ""
 previous_text=$(cat $PREV_FILE 2>/dev/null)
 
 if [[ "$html_content" != "$previous_text" ]]; then
-
+    if [[ -n "$parsed_text" && $(echo "$html_content" | grep -i "Вид робіт") ]]; then
+        if grep -qi "Вид робіт" "$PREV_FILE"; then
+            SUBJECT="Змінились погодинні відключення!"
+        else
+            SUBJECT="З'явились погодинні відключення!"
+        fi
+        send_message "$1" "$parsed_text"
+    elif [[ $(echo "$html_content" | grep -i "відсутнє зареєстроване відключення") ]]; then
+        send_message "$1" "Погодинних відключень немає!"
+    else
+        send_message "$1" "Помилка отримання даних."
+    fi
     echo "$html_content" > $PREV_FILE
     save_log
-
-        if [[ -n "$parsed_text" && $(echo "$html_content" | grep -i "Вид робіт") ]]; then
-                SUBJECT="З'явились погодинні відключення!"
-                send_message "$1" "$parsed_text"
-        elif [[ $(echo "$html_content" | grep -i "відсутнє зареєстроване відключення") ]]; then
-                send_message "$1" "Погодинних відключень немає!"
-        else
-                send_message "$1" "Помилка отримання даних."
-        fi
 fi
