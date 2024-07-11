@@ -25,11 +25,12 @@ PREV_FILE="$SCRIPT_DIR/${SCRIPTNAME}_lastdata_$CFG_FILE.txt"
 LOG_DIR="$SCRIPT_DIR/logs"
 LOG_FILE="$LOG_DIR/${SCRIPTNAME}_$CFG_FILE.log"
 CURR_DATE="$(date +"%H:%M:%S %d.%m.%Y")"
+ENABLE_LOG="yes"
 ###
 ### Parts for sending graphs
 PAGE_URL="$DOMAIN/page/pogodinni-vidkljuchennja"
 EXPECTED_IMAGE_ALT_KEYWORD="ГПВ"
-HASH_FILE="./last_image_hash.txt"
+HASH_FILE="$SCRIPT_DIR/last_image_hash_${CFG_FILE}.txt"
 ###
 
 if [ ! -d "$LOG_DIR" ]; then
@@ -88,7 +89,7 @@ sending_graphs() {
 			exit 1
 		}
 		local image_url=$(get_image_url)
-		local image_file=$(mktemp)
+		local image_file=$(mktemp --suffix=.png)
 		curl -s -o $image_file $image_url
 		send_image() {
 				if [ "$SEND_TO" == "TG" ]; then
@@ -100,10 +101,11 @@ sending_graphs() {
 				fi
 		}
 		send_image_slack() {
-			curl -s -F file=@$image_file \
-								-F channels=$SLACK_CHANNEL \
-								-H "Authorization: Bearer $SLACK_TOKEN" \
-								https://slack.com/api/files.upload
+			curl -s -o /dev/null \
+				-F file=@$image_file \
+				-F channels=$SLACK_CHANNEL \
+				-H "Authorization: Bearer $SLACK_TOKEN" \
+				https://slack.com/api/files.upload
 		}
 		
 		send_image_tg() {
@@ -114,16 +116,11 @@ sending_graphs() {
 		}		
 		current_image_url=$(get_image_url)
 		if [ -n "$current_image_url" ]; then
-			# Розрахунок хешу поточного зображення
 			current_image_hash=$(curl -s $current_image_url | md5sum | awk '{print $1}')
-			# Зчитування хешу останнього зображення
 			last_image_hash=$(cat $HASH_FILE 2>/dev/null)
-			# Порівняння хешів
 			if [ "$current_image_hash" != "$last_image_hash" ]; then
-				# Відправка зображення
 				send_image $image_file
 				rm -f $image_file
-				# Збереження поточного хешу зображення
 				echo $current_image_hash > $HASH_FILE
 			fi
 		fi		
@@ -169,4 +166,3 @@ if [[ "$html_content" != "$previous_text" ]]; then
     echo "$html_content" > $PREV_FILE
     save_log
 fi
-
