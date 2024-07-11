@@ -3,20 +3,21 @@
 # Example run script: "bash HoeShutdownNotifier.sh home"
 #### Example file "home"
 ## SEND_TO="TG"
-## STREET_ID="123456"
-## HOUSE="12"
 ## TG_BOT_ID="bot6191234558:AAGWWpWtZUExAmPlEbpt3WkS8QzdcuQNq2DA"
 ## TG_CHAT_ID="-1001553812345"
 ## TG_DIS_NOTIFY="true"
-## SLACK_CNANNEL="C02EXAMPLE"
+## SLACK_CHANNEL="C02EXAMPLE"
 ## SLACK_TOKEN="xoxb-2370012345-6315485354321-a8669EiJnp0JExAmPlELwOHg"
 ## ENABLE_LOG="yes"
+## SEND_GRAPHS="yes"
 ####
 
+### Parts for sending shutdown-events
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CFG_FILE="$1"
 source "$SCRIPT_DIR/$CFG_FILE"
-URL="https://hoe.com.ua/shutdown-events"
+DOMAIN="https://hoe.com.ua"
+URL="$DOMAIN/shutdown-events"
 POST_DATA="streetId=$STREET_ID&house=$HOUSE"
 SUBJECT=""
 SCRIPTNAME="$(basename "$0" .sh)"
@@ -25,6 +26,12 @@ LOG_DIR="$SCRIPT_DIR/logs"
 LOG_FILE="$LOG_DIR/${SCRIPTNAME}_$CFG_FILE.log"
 CURR_DATE="$(date +"%H:%M:%S %d.%m.%Y")"
 ENABLE_LOG="yes"
+###
+### Parts for sending graphs
+PAGE_URL="$DOMAIN/page/pogodinni-vidkljuchennja"
+EXPECTED_IMAGE_ALT_KEYWORD="ГПВ"
+HASH_FILE="./last_image_hash.txt"
+###
 
 if [ ! -d "$LOG_DIR" ]; then
     mkdir -p "$LOG_DIR"
@@ -52,7 +59,7 @@ send_message_slack() {
 
     curl -s -o /dev/null \
         -H "Content-type: application/json" \
-    --data "{\"channel\":\"$SLACK_CNANNEL\",\"blocks\":[{\"type\":\"section\",\"text\":{\"type\":\"mrkdwn\",\"text\":\"${SUBJECT}\n\`\`\`${message}\`\`\`\"}}]}" \
+    --data "{\"channel\":\"$SLACK_CHANNEL\",\"blocks\":[{\"type\":\"section\",\"text\":{\"type\":\"mrkdwn\",\"text\":\"${SUBJECT}\n\`\`\`${message}\`\`\`\"}}]}" \
     -H "Authorization: Bearer $SLACK_TOKEN" \
     -X POST https://slack.com/api/chat.postMessage
 }
@@ -75,7 +82,59 @@ save_log() {
 	fi
 }
 
+sending_graphs() {
+	if [ "$SEND_GRAPHS" == "yes" ]; then
+		get_image_url() {
+			curl -s $PAGE_URL | grep -oP '<img[^>]*alt="[^"]*'"$EXPECTED_IMAGE_ALT_KEYWORD"'[^"]*"[^>]*>' | grep -oP 'src="[^"]*"' | awk -v domain="$DOMAIN" -F'"' '{print domain$2}'
+			exit 1
+		}
+		local image_url=$(get_image_url)
+		local image_file=$(mktemp)
+		curl -s -o $image_file $image_url
+		send_image() {
+				if [ "$SEND_TO" == "TG" ]; then
+						send_image_tg "$1"
+				elif [ "$SEND_TO" == "SLACK" ]; then
+						send_image_slack "$1"
+				else
+						exit 1
+				fi
+		}
+		send_image_slack() {
+			curl -s -F file=@$image_file \
+								-F channels=$SLACK_CHANNEL \
+								-H "Authorization: Bearer $SLACK_TOKEN" \
+								https://slack.com/api/files.upload
+		}
+		
+		send_image_tg() {
+			curl -s -o /dev/null \
+				-X POST "https://api.telegram.org/${TG_BOT_ID}/sendPhoto" \
+				-F chat_id="${TG_CHAT_ID}" \
+				-F photo=@$image_file
+		}		
+		current_image_url=$(get_image_url)
+		if [ -n "$current_image_url" ]; then
+			# Розрахунок хешу поточного зображення
+			current_image_hash=$(curl -s $current_image_url | md5sum | awk '{print $1}')
+			# Зчитування хешу останнього зображення
+			last_image_hash=$(cat $HASH_FILE 2>/dev/null)
+			# Порівняння хешів
+			if [ "$current_image_hash" != "$last_image_hash" ]; then
+				# Відправка зображення
+				send_image $image_file
+				rm -f $image_file
+				# Збереження поточного хешу зображення
+				echo $current_image_hash > $HASH_FILE
+			fi
+		fi		
+	fi
+}
+
+sending_graphs
+
 html_content=$(curl -s "${URL}" -H 'x-requested-with: XMLHttpRequest' --data-raw "${POST_DATA}")
+#html_content=$(curl -s "https://dmsrvc.com/1.html")
 
 parsed_text=$(echo "$html_content" | sed -n '
     /<tr>/ {
@@ -112,3 +171,4 @@ if [[ "$html_content" != "$previous_text" ]]; then
     echo "$html_content" > $PREV_FILE
     save_log
 fi
+
