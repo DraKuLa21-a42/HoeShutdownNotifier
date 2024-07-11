@@ -25,7 +25,6 @@ PREV_FILE="$SCRIPT_DIR/${SCRIPTNAME}_lastdata_$CFG_FILE.txt"
 LOG_DIR="$SCRIPT_DIR/logs"
 LOG_FILE="$LOG_DIR/${SCRIPTNAME}_$CFG_FILE.log"
 CURR_DATE="$(date +"%H:%M:%S %d.%m.%Y")"
-ENABLE_LOG="yes"
 ###
 ### Parts for sending graphs
 PAGE_URL="$DOMAIN/page/pogodinni-vidkljuchennja"
@@ -134,7 +133,6 @@ sending_graphs() {
 sending_graphs
 
 html_content=$(curl -s "${URL}" -H 'x-requested-with: XMLHttpRequest' --data-raw "${POST_DATA}")
-#html_content=$(curl -s "https://dmsrvc.com/1.html")
 
 parsed_text=$(echo "$html_content" | sed -n '
     /<tr>/ {
