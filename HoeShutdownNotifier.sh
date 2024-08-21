@@ -29,7 +29,7 @@ ENABLE_LOG="yes"
 ###
 ### Parts for sending graphs
 PAGE_URL="$DOMAIN/page/pogodinni-vidkljuchennja"
-EXPECTED_IMAGE_ALT_KEYWORD="ГПВ"
+EXPECTED_IMAGE_ALT_KEYWORD="(ГПВ|gpv)"
 HASH_FILE="$SCRIPT_DIR/last_image_hash_${CFG_FILE}.txt"
 ###
 
