@@ -84,7 +84,7 @@ save_log() {
 sending_graphs() {
         if [ "$SEND_GRAPHS" == "yes" ]; then
                 get_image_url() {
-                        curl -s $PAGE_URL | grep -oP '<img[^>]*alt="[^"]*'"$EXPECTED_IMAGE_ALT_KEYWORD"'[^"]*"[^>]*>' | grep -oP 'src="[^"]*"' | awk -v domain="$DOMAIN" -F'"' '{print domain$2}'
+                        curl -s $PAGE_URL | grep -oP '<img[^>]*alt="[^"]*'"$EXPECTED_IMAGE_ALT_KEYWORD"'[^"]*"[^>]*>' | grep -oP 'src="[^"]*"' | awk -v domain="$DOMAIN" -F'"' '{print domain$2}' | head -n 1
                         exit 1
                 }
                 local image_url=$(get_image_url)
