@@ -25,12 +25,11 @@ PREV_FILE="$SCRIPT_DIR/${SCRIPTNAME}_lastdata_$CFG_FILE.txt"
 LOG_DIR="$SCRIPT_DIR/logs"
 LOG_FILE="$LOG_DIR/${SCRIPTNAME}_$CFG_FILE.log"
 CURR_DATE="$(date +"%H:%M:%S %d.%m.%Y")"
-ENABLE_LOG="yes"
 ###
 ### Parts for sending graphs
 PAGE_URL="$DOMAIN/page/pogodinni-vidkljuchennja"
 EXPECTED_IMAGE_ALT_KEYWORD="(ГПВ|gpv)"
-HASH_FILE="$SCRIPT_DIR/last_image_hash_${CFG_FILE}.txt"
+URL_FILE="$SCRIPT_DIR/last_image_url_${CFG_FILE}.txt"
 ###
 
 if [ ! -d "$LOG_DIR" ]; then
@@ -75,61 +74,62 @@ send_message() {
 }
 
 save_log() {
-	if [ "$ENABLE_LOG" == "yes" ]; then
+        if [ "$ENABLE_LOG" == "yes" ]; then
         echo "$CURR_DATE" >> "$LOG_FILE"
         echo "$html_content" >> "$LOG_FILE"
         echo "" >> "$LOG_FILE"
-	fi
+        fi
 }
 
 sending_graphs() {
-	if [ "$SEND_GRAPHS" == "yes" ]; then
-		get_image_url() {
-			curl -s $PAGE_URL | grep -oP '<img[^>]*alt="[^"]*'"$EXPECTED_IMAGE_ALT_KEYWORD"'[^"]*"[^>]*>' | grep -oP 'src="[^"]*"' | awk -v domain="$DOMAIN" -F'"' '{print domain$2}'
-			exit 1
-		}
-		local image_url=$(get_image_url)
-		local image_file=$(mktemp --suffix=.png)
-		curl -s -o $image_file $image_url
-		send_image() {
-				if [ "$SEND_TO" == "TG" ]; then
-						send_image_tg "$1"
-				elif [ "$SEND_TO" == "SLACK" ]; then
-						send_image_slack "$1"
-				else
-						exit 1
-				fi
-		}
-		send_image_slack() {
-			curl -s -o /dev/null \
-				-F file=@$image_file \
-				-F channels=$SLACK_CHANNEL \
-				-H "Authorization: Bearer $SLACK_TOKEN" \
-				https://slack.com/api/files.upload
-		}
-		
-		send_image_tg() {
-			curl -s -o /dev/null \
-				-X POST "https://api.telegram.org/${TG_BOT_ID}/sendPhoto" \
-				-F chat_id="${TG_CHAT_ID}" \
-				-F photo=@$image_file
-		}		
-		current_image_url=$(get_image_url)
-		if [ -n "$current_image_url" ]; then
-			current_image_hash=$(curl -s $current_image_url | md5sum | awk '{print $1}')
-			last_image_hash=$(cat $HASH_FILE 2>/dev/null)
-			if [ "$current_image_hash" != "$last_image_hash" ]; then
-				send_image $image_file
-				rm -f $image_file
-				echo $current_image_hash > $HASH_FILE
-			fi
-		fi		
-	fi
+        if [ "$SEND_GRAPHS" == "yes" ]; then
+                get_image_url() {
+                        curl -s $PAGE_URL | grep -oP '<img[^>]*alt="[^"]*'"$EXPECTED_IMAGE_ALT_KEYWORD"'[^"]*"[^>]*>' | grep -oP 'src="[^"]*"' | awk -v domain="$DOMAIN" -F'"' '{print domain$2}'
+                        exit 1
+                }
+                local image_url=$(get_image_url)
+                local image_file=$(mktemp --suffix=.png)
+                curl -s -o $image_file $image_url
+                echo $get_image_url >> ~/image_url.txt
+                send_image() {
+                                if [ "$SEND_TO" == "TG" ]; then
+                                                send_image_tg "$1"
+                                elif [ "$SEND_TO" == "SLACK" ]; then
+                                                send_image_slack "$1"
+                                else
+                                                exit 1
+                                fi
+                }
+                send_image_slack() {
+                        curl -s -o /dev/null \
+                                -F file=@$image_file \
+                                -F channels=$SLACK_CHANNEL \
+                                -H "Authorization: Bearer $SLACK_TOKEN" \
+                                https://slack.com/api/files.upload
+                }
+
+                send_image_tg() {
+                        curl -s -o /dev/null \
+                                -X POST "https://api.telegram.org/${TG_BOT_ID}/sendPhoto" \
+                                -F chat_id="${TG_CHAT_ID}" \
+                                -F photo=@$image_file
+                }
+                current_image_url=$(get_image_url)
+                if [ -n "$current_image_url" ]; then
+                        last_image_url=$(cat $URL_FILE 2>/dev/null)
+                        if [ "$current_image_url" != "$last_image_url" ]; then
+                                send_image $image_file
+                                rm -f $image_file
+                                echo $current_image_url > $URL_FILE
+                        fi
+                fi
+        fi
 }
 
 sending_graphs
 
 html_content=$(curl -s "${URL}" -H 'x-requested-with: XMLHttpRequest' --data-raw "${POST_DATA}")
+#html_content=$(curl -s "https://dmsrvc.com/1.html")
 
 parsed_text=$(echo "$html_content" | sed -n '
     /<tr>/ {
