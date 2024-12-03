@@ -128,6 +128,7 @@ sending_graphs() {
 
 sending_graphs
 
+if [ "$SEND_SHUTDOWN_EVENTS" == "yes" ]; then
 html_content=$(curl -s "${URL}" -H 'x-requested-with: XMLHttpRequest' --data-raw "${POST_DATA}")
 #html_content=$(curl -s "https://dmsrvc.com/1.html")
 
@@ -165,4 +166,5 @@ if [[ "$html_content" != "$previous_text" ]]; then
     fi
     echo "$html_content" > $PREV_FILE
     save_log
+fi
 fi
