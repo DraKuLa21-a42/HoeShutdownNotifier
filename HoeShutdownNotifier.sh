@@ -90,7 +90,6 @@ sending_graphs() {
                 local image_url=$(get_image_url)
                 local image_file=$(mktemp --suffix=.png)
                 curl -s -o $image_file $image_url
-                echo $get_image_url >> ~/image_url.txt
                 send_image() {
                                 if [ "$SEND_TO" == "TG" ]; then
                                                 send_image_tg "$1"
