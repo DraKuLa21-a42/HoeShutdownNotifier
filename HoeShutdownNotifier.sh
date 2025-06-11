@@ -82,48 +82,59 @@ save_log() {
 }
 
 sending_graphs() {
-        if [ "$SEND_GRAPHS" == "yes" ]; then
-                get_image_url() {
-                        curl -s $PAGE_URL | grep -oP '<img[^>]*alt="[^"]*'"$EXPECTED_IMAGE_ALT_KEYWORD"'[^"]*"[^>]*>' | grep -oP 'src="[^"]*"' | awk -v domain="$DOMAIN" -F'"' '{print domain$2}' | head -n 1
-                        exit 1
-                }
-                local image_url=$(get_image_url)
-                local image_file=$(mktemp --suffix=.png)
-                curl -s -o $image_file $image_url
-                send_image() {
-                                if [ "$SEND_TO" == "TG" ]; then
-                                                send_image_tg "$1"
-                                elif [ "$SEND_TO" == "SLACK" ]; then
-                                                send_image_slack "$1"
-                                else
-                                                exit 1
-                                fi
-                }
-                send_image_slack() {
-                        curl -s -o /dev/null \
-                                -F file=@$image_file \
-                                -F channels=$SLACK_CHANNEL \
-                                -H "Authorization: Bearer $SLACK_TOKEN" \
-                                https://slack.com/api/files.upload
-                }
+    if [ "$SEND_GRAPHS" == "yes" ]; then
 
-                send_image_tg() {
-                        curl -s -o /dev/null \
-                                -X POST "https://api.telegram.org/${TG_BOT_ID}/sendPhoto" \
-                                -F chat_id="${TG_CHAT_ID}" \
-                                -F photo=@$image_file
-                }
-                current_image_url=$(get_image_url)
-                if [ -n "$current_image_url" ]; then
-                        last_image_url=$(cat $URL_FILE 2>/dev/null)
-                        if [ "$current_image_url" != "$last_image_url" ]; then
-                                send_image $image_file
-                                echo $current_image_url > $URL_FILE
-                        fi
+        get_image_url() {
+            curl -s "$PAGE_URL" | \
+                grep -oP '<img[^>]*alt="[^"]*'"$EXPECTED_IMAGE_ALT_KEYWORD"'[^"]*"[^>]*>' | \
+                grep -oP 'src="[^"]*"' | \
+                awk -v domain="$DOMAIN" -F'"' '{print domain$2}' | head -n 1
+        }
+
+        local image_url=$(get_image_url)
+
+        if [ -n "$image_url" ]; then
+            local image_file=$(mktemp --suffix=.png)
+            curl -s -o "$image_file" "$image_url"
+
+            send_image_slack() {
+                curl -s -o /dev/null \
+                    -F file=@"$image_file" \
+                    -F channels="$SLACK_CHANNEL" \
+                    -H "Authorization: Bearer $SLACK_TOKEN" \
+                    https://slack.com/api/files.upload
+            }
+
+            send_image_tg() {
+                curl -s -o /dev/null \
+                    -X POST "https://api.telegram.org/${TG_BOT_ID}/sendPhoto" \
+                    -F chat_id="${TG_CHAT_ID}" \
+                    -F photo=@"$image_file"
+            }
+
+            send_image() {
+                if [ "$SEND_TO" == "TG" ]; then
+                    send_image_tg "$1"
+                elif [ "$SEND_TO" == "SLACK" ]; then
+                    send_image_slack "$1"
+                else
+                    exit 1
                 fi
-                rm -f $image_file
+            }
+
+            current_image_url="$image_url"
+            last_image_url=$(cat "$URL_FILE" 2>/dev/null)
+
+            if [ "$current_image_url" != "$last_image_url" ]; then
+                send_image "$image_file"
+                echo "$current_image_url" > "$URL_FILE"
+            fi
+
+            rm -f "$image_file"
         fi
+    fi
 }
+
 
 sending_graphs
 
