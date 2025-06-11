@@ -119,10 +119,10 @@ sending_graphs() {
                         last_image_url=$(cat $URL_FILE 2>/dev/null)
                         if [ "$current_image_url" != "$last_image_url" ]; then
                                 send_image $image_file
-                                rm -f $image_file
                                 echo $current_image_url > $URL_FILE
                         fi
                 fi
+                rm -f $image_file
         fi
 }
 
