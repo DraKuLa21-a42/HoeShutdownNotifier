@@ -58,27 +58,27 @@ send_message_slack() {
 
     curl -s -o /dev/null \
         -H "Content-type: application/json" \
-    --data "{\"channel\":\"$SLACK_CHANNEL\",\"blocks\":[{\"type\":\"section\",\"text\":{\"type\":\"mrkdwn\",\"text\":\"${SUBJECT}\n\`\`\`${message}\`\`\`\"}}]}" \
-    -H "Authorization: Bearer $SLACK_TOKEN" \
-    -X POST https://slack.com/api/chat.postMessage
+        --data "{\"channel\":\"$SLACK_CHANNEL\",\"blocks\":[{\"type\":\"section\",\"text\":{\"type\":\"mrkdwn\",\"text\":\"${SUBJECT}\n\`\`\`${message}\`\`\`\"}}]}" \
+        -H "Authorization: Bearer $SLACK_TOKEN" \
+        -X POST https://slack.com/api/chat.postMessage
 }
 
 send_message() {
-        if [ "$SEND_TO" == "TG" ]; then
-                send_message_tg "$2"
-        elif [ "$SEND_TO" == "SLACK" ]; then
-                send_message_slack "$2"
-        else
-                exit 1
-        fi
+    if [ "$SEND_TO" == "TG" ]; then
+        send_message_tg "$2"
+    elif [ "$SEND_TO" == "SLACK" ]; then
+        send_message_slack "$2"
+    else
+        exit 1
+    fi
 }
 
 save_log() {
-        if [ "$ENABLE_LOG" == "yes" ]; then
+    if [ "$ENABLE_LOG" == "yes" ]; then
         echo "$CURR_DATE" >> "$LOG_FILE"
         echo "$html_content" >> "$LOG_FILE"
         echo "" >> "$LOG_FILE"
-        fi
+    fi
 }
 
 sending_graphs() {
@@ -135,46 +135,72 @@ sending_graphs() {
     fi
 }
 
+# ----------------- Нова функція для повторних спроб -----------------
+fetch_with_retries() {
+    local url="$1"
+    local data="$2"
+    local retries=5      # кількість спроб
+    local delay=10       # пауза між спробами (секунди)
+
+    for ((i=1; i<=retries; i++)); do
+        response=$(curl -s --max-time 15 "$url" -H 'x-requested-with: XMLHttpRequest' --data-raw "$data")
+
+        if [[ -n "$response" ]]; then
+            echo "$response"
+            return 0
+        fi
+
+        echo "[$(date +'%H:%M:%S')] Спроба $i з $retries не вдалася. Чекаю $delay секунд..." >&2
+        sleep "$delay"
+    done
+
+    echo "__FETCH_FAILED__"
+    return 1
+}
+# --------------------------------------------------------------------
 
 sending_graphs
 
 if [ "$SEND_SHUTDOWN_EVENTS" == "yes" ]; then
-html_content=$(curl -s "${URL}" -H 'x-requested-with: XMLHttpRequest' --data-raw "${POST_DATA}")
-#html_content=$(curl -s "https://dmsrvc.com/1.html")
+    html_content=$(fetch_with_retries "${URL}" "${POST_DATA}")
 
-parsed_text=$(echo "$html_content" | sed -n '
-    /<tr>/ {
-        n
-        s/.*<td>\(.*\)<\/td>.*/Вид робіт: \1/p
-        n
-        s/.*<td>\(.*\)<\/td>.*/Тип відключення: \1/p
-        n
-        s/.*<td class="text-center">\([^<]*\)<\/td>.*/Черга: \1/p
-        n
-        s/.*<td class="text-right">\([^<]*\)<\/td>.*/Початок: \1/p
-        n
-        s/.*<td class="text-right">\([^<]*\)<\/td>.*/Кінець: \1/p
-    }
+    parsed_text=$(echo "$html_content" | sed -n '
+        /<tr>/ {
+            n
+            s/.*<td>\(.*\)<\/td>.*/Вид робіт: \1/p
+            n
+            s/.*<td>\(.*\)<\/td>.*/Тип відключення: \1/p
+            n
+            s/.*<td class="text-center">\([^<]*\)<\/td>.*/Черга: \1/p
+            n
+            s/.*<td class="text-right">\([^<]*\)<\/td>.*/Початок: \1/p
+            n
+            s/.*<td class="text-right">\([^<]*\)<\/td>.*/Кінець: \1/p
+        }
     ')
 
-parsed_text=$(echo "$parsed_text" | awk '{print} $0 ~ /^Кінець:/ {print ""}')
+    parsed_text=$(echo "$parsed_text" | awk '{print} $0 ~ /^Кінець:/ {print ""}')
 
-previous_text=$(cat $PREV_FILE 2>/dev/null)
+    previous_text=$(cat $PREV_FILE 2>/dev/null)
 
-if [[ "$html_content" != "$previous_text" ]]; then
-    if [[ -n "$parsed_text" && $(echo "$html_content" | grep -i "Вид робіт") ]]; then
-        if grep -qi "Вид робіт" "$PREV_FILE"; then
-            SUBJECT="Змінились погодинні відключення!"
+    if [[ "$html_content" != "$previous_text" ]]; then
+        if [[ -n "$parsed_text" && $(echo "$html_content" | grep -i "Вид робіт") ]]; then
+            if grep -qi "Вид робіт" "$PREV_FILE"; then
+                SUBJECT="Змінились погодинні відключення!"
+            else
+                SUBJECT="З'явились погодинні відключення!"
+            fi
+            send_message "$1" "$parsed_text"
+        elif [[ $(echo "$html_content" | grep -i "відсутнє зареєстроване відключення") ]]; then
+            send_message "$1" "Погодинних відключень немає!"
         else
-            SUBJECT="З'явились погодинні відключення!"
+            if [[ "$html_content" == "__FETCH_FAILED__" ]]; then
+                send_message "$1" "Сайт hoe.com.ua тимчасово недоступний після 5 спроб."
+            else
+                send_message "$1" "Помилка отримання даних."
+            fi
         fi
-        send_message "$1" "$parsed_text"
-    elif [[ $(echo "$html_content" | grep -i "відсутнє зареєстроване відключення") ]]; then
-        send_message "$1" "Погодинних відключень немає!"
-    else
-        send_message "$1" "Помилка отримання даних."
+        echo "$html_content" > $PREV_FILE
+        save_log
     fi
-    echo "$html_content" > $PREV_FILE
-    save_log
-fi
 fi
