@@ -10,12 +10,15 @@
 ## SLACK_TOKEN="xoxb-2370012345-6315485354321-a8669EiJnp0JExAmPlELwOHg"
 ## ENABLE_LOG="yes"
 ## SEND_GRAPHS="yes"
+## SEND_SHUTDOWN_EVENTS="yes"
+## RETRIES=5
+## DELAY=10
 ####
 
-### Parts for sending shutdown-events
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CFG_FILE="$1"
 source "$SCRIPT_DIR/$CFG_FILE"
+
 DOMAIN="https://hoe.com.ua"
 URL="$DOMAIN/shutdown-events"
 POST_DATA="streetId=$STREET_ID&house=$HOUSE"
@@ -25,20 +28,16 @@ PREV_FILE="$SCRIPT_DIR/${SCRIPTNAME}_lastdata_$CFG_FILE.txt"
 LOG_DIR="$SCRIPT_DIR/logs"
 LOG_FILE="$LOG_DIR/${SCRIPTNAME}_$CFG_FILE.log"
 CURR_DATE="$(date +"%H:%M:%S %d.%m.%Y")"
-###
-### Parts for sending graphs
+
 PAGE_URL="$DOMAIN/page/pogodinni-vidkljuchennja"
 EXPECTED_IMAGE_ALT_KEYWORD="(ГПВ|gpv)"
 URL_FILE="$SCRIPT_DIR/last_image_url_${CFG_FILE}.txt"
-###
 
-if [ ! -d "$LOG_DIR" ]; then
-    mkdir -p "$LOG_DIR"
-fi
+[ ! -d "$LOG_DIR" ] && mkdir -p "$LOG_DIR"
 
+# ----------------- Функції для повідомлень -----------------
 send_message_tg() {
     local message="$1"
-
     curl -s -o /dev/null \
         --data parse_mode=HTML \
         --data chat_id="${TG_CHAT_ID}" \
@@ -49,16 +48,11 @@ send_message_tg() {
 
 send_message_slack() {
     local message="$1"
-
-    if [ -z "$SUBJECT" ]; then
-        SUBJECT=""
-    else
-        SUBJECT="*$SUBJECT*"
-    fi
+    local subj="${SUBJECT:+*$SUBJECT*}"
 
     curl -s -o /dev/null \
         -H "Content-type: application/json" \
-        --data "{\"channel\":\"$SLACK_CHANNEL\",\"blocks\":[{\"type\":\"section\",\"text\":{\"type\":\"mrkdwn\",\"text\":\"${SUBJECT}\n\`\`\`${message}\`\`\`\"}}]}" \
+        --data "{\"channel\":\"$SLACK_CHANNEL\",\"blocks\":[{\"type\":\"section\",\"text\":{\"type\":\"mrkdwn\",\"text\":\"${subj}\n\`\`\`${message}\`\`\`\"}}]}" \
         -H "Authorization: Bearer $SLACK_TOKEN" \
         -X POST https://slack.com/api/chat.postMessage
 }
@@ -135,23 +129,19 @@ sending_graphs() {
     fi
 }
 
-# ----------------- Нова функція для повторних спроб -----------------
+# ----------------- Функція з повторними спробами -----------------
 fetch_with_retries() {
     local url="$1"
     local data="$2"
-    local retries=5      # кількість спроб
-    local delay=10       # пауза між спробами (секунди)
 
-    for ((i=1; i<=retries; i++)); do
+    for ((i=1; i<=RETRIES; i++)); do
         response=$(curl -s --max-time 15 "$url" -H 'x-requested-with: XMLHttpRequest' --data-raw "$data")
-
         if [[ -n "$response" ]]; then
             echo "$response"
             return 0
         fi
-
-        echo "[$(date +'%H:%M:%S')] Спроба $i з $retries не вдалася. Чекаю $delay секунд..." >&2
-        sleep "$delay"
+        echo "[$(date +'%H:%M:%S')] Спроба $i з $RETRIES не вдалася. Чекаю $DELAY секунд..." >&2
+        sleep "$DELAY"
     done
 
     echo "__FETCH_FAILED__"
@@ -181,26 +171,23 @@ if [ "$SEND_SHUTDOWN_EVENTS" == "yes" ]; then
 
     parsed_text=$(echo "$parsed_text" | awk '{print} $0 ~ /^Кінець:/ {print ""}')
 
-    previous_text=$(cat $PREV_FILE 2>/dev/null)
+    previous_text=$(cat "$PREV_FILE" 2>/dev/null)
 
     if [[ "$html_content" != "$previous_text" ]]; then
         if [[ -n "$parsed_text" && $(echo "$html_content" | grep -i "Вид робіт") ]]; then
-            if grep -qi "Вид робіт" "$PREV_FILE"; then
-                SUBJECT="Змінились погодинні відключення!"
-            else
-                SUBJECT="З'явились погодинні відключення!"
-            fi
+            SUBJECT=$(grep -qi "Вид робіт" "$PREV_FILE" && echo "Змінились погодинні відключення!" || echo "З'явились погодинні відключення!")
             send_message "$1" "$parsed_text"
         elif [[ $(echo "$html_content" | grep -i "відсутнє зареєстроване відключення") ]]; then
             send_message "$1" "Погодинних відключень немає!"
         else
             if [[ "$html_content" == "__FETCH_FAILED__" ]]; then
-                send_message "$1" "Сайт hoe.com.ua тимчасово недоступний після 5 спроб."
+                total_wait=$((RETRIES * DELAY))
+                send_message "$1" "Сайт hoe.com.ua недоступний. Виконано $RETRIES спроб (загальний час очікування: ${total_wait}s)."
             else
                 send_message "$1" "Помилка отримання даних."
             fi
         fi
-        echo "$html_content" > $PREV_FILE
+        echo "$html_content" > "$PREV_FILE"
         save_log
     fi
 fi
